@@ -1,0 +1,27 @@
+
+HOME: Hi i'm MolCdyat Bot 😀 How are you ? Hope you are good, How do you like to find your movie by :
+	Movie Title 
+	Movie Genre
+	Actor Name
+
+
+Movie Title:
+	read Token
+	=> Find it :
+		=>Found => show Movie ,and details // or show Movies !!
+		=> else : Can't Find a Movie with this Title :/
+		Goto: HOME
+Movie Genre:
+	read Token
+	=> Find it :
+		=>Found => show Best and newsest Movies ,and details 
+		=> Exception: ( undefined Genre !)
+		Goto: HOME
+Actor Name: 
+	read Token
+	=> Find it :
+		=>Found => show Best and newsest Actors'Movies ,and details 
+		=> Exception: ( undefined Actor !) 
+		Goto: HOME
+
+		
