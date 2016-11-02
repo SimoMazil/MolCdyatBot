@@ -25,10 +25,15 @@ if ($verify_token === $VERIFY_TOKEN) {
   $payload = $input['entry'][0]['messaging'][0]['postback']['payload'];
 
   if(!empty($message)){
-  	if(strtolower($message) == 'hi'){
-      send_qst($sender, "", $PAGE_ACCESS_TOKEN);
-  	}else{
-      send_replay($sender, "plz say Hi ! or i can't offer you my services", $PAGE_ACCESS_TOKEN);
+  	send_qst($sender, "", $PAGE_ACCESS_TOKEN);
+  }else if(!empty($payload)){
+    if($payload == 'title'){
+      ask_user($sender, "Write your movie title", $PAGE_ACCESS_TOKEN);
+    }else if($payload == 'genre'){
+      ask_user($sender, "Choose your favourite genre", $PAGE_ACCESS_TOKEN);
+      quick_replies($sender, "", $PAGE_ACCESS_TOKEN);
+    }else if($payload == 'actor'){
+      ask_user($sender, "Write your actor name", $PAGE_ACCESS_TOKEN);
     }
   }
 
@@ -65,12 +70,22 @@ function first_qst_to_user($sender, $name){
         "type":"template",
         "payload":{
           "template_type":"button",
-          "text":"Great Mr '.$name.'",
+          "text":"Hi i\'m MolCdyat Bot :D How are you ? Hope you are good, How do you like to find your movie by :",
           "buttons":[
             {
               "type":"postback",
-              "title":"Search movie",
-              "payload":"searchMovie"
+              "title":"Movie Title",
+              "payload":"title"
+            },
+            {
+              "type":"postback",
+              "title":"Movie Genre",
+              "payload":"genre"
+            },
+            {
+              "type":"postback",
+              "title":"Actor Name",
+              "payload":"actor"
             }
           ]
         }
@@ -81,15 +96,41 @@ function first_qst_to_user($sender, $name){
 	return $jsonData;
 }
 
-function replay_ask_to_say_hi($sender, $message){
+function ask_user_to_write($sender, $message){
 	// Build the json payload data
 	$jsonData = '{
     "recipient":{
       "id":"'.$sender.'"
     },
     "message":{
-      "text": "'.$message.'"
+      "text":"'.$message.'"
     }
+
+	}';
+	return $jsonData;
+}
+
+function quick_replies_genre($sender, $message){
+  // Build the json payload data
+	$jsonData = '{
+    "recipient":{
+      "id":"'.$sender.'"
+    },
+    "message":{
+    "text":"Pick a color:",
+    "quick_replies":[
+      {
+        "content_type":"text",
+        "title":"Red",
+        "payload":"DEVELOPER_DEFINED_PAYLOAD_FOR_PICKING_RED"
+      },
+      {
+        "content_type":"text",
+        "title":"Green",
+        "payload":"DEVELOPER_DEFINED_PAYLOAD_FOR_PICKING_GREEN"
+      }
+    ]
+  }
 
 	}';
 	return $jsonData;
@@ -101,8 +142,14 @@ function send_qst($sender, $name, $access_token){
 	return $result;
 }
 
-function send_replay($sender, $message, $access_token){
-	$jsonData = replay_ask_to_say_hi($sender, $message);
+function ask_user($sender, $message, $access_token){
+	$jsonData = ask_user_to_write($sender, $message);
+	$result = send_message($access_token, $jsonData);
+	return $result;
+}
+
+function quick_replies($sender, $message, $access_token){
+	$jsonData = quick_replies_genre($sender, $message);
 	$result = send_message($access_token, $jsonData);
 	return $result;
 }
