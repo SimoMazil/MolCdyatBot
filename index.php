@@ -26,9 +26,7 @@ if ($verify_token === $VERIFY_TOKEN) {
 
   if(!empty($message)){
   	if(strtolower($message) == 'hi'){
-      $user = json_decode(file_get_contents('https://graph.facebook.com/v2.6/'.$sender.'?fields=first_name,last_name,profile_pic,locale,timezone,gender&access_token='.$PAGE_ACCESS_TOKEN), true);
-      print $user;
-      send_qst($sender, $name, $PAGE_ACCESS_TOKEN);
+      send_qst($sender, "", $PAGE_ACCESS_TOKEN);
   	}else{
       send_replay($sender, "plz say Hi ! or i can't offer you my services", $PAGE_ACCESS_TOKEN);
     }
