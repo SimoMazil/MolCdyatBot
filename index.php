@@ -13,7 +13,9 @@ if ($verify_token === $VERIFY_TOKEN) {
   	//If the Verify token matches, return the challenge.
   	echo $challenge;
 }else {
-	print "Hello World!";
+
+  print "Hello World !";
+
 }
 
   $input = json_decode(file_get_contents('php://input'), true);
@@ -25,15 +27,43 @@ if ($verify_token === $VERIFY_TOKEN) {
   $payload = $input['entry'][0]['messaging'][0]['postback']['payload'];
 
   if(!empty($message)){
-  	send_qst($sender, "", $PAGE_ACCESS_TOKEN);
+
+    send_qst($sender, "", $PAGE_ACCESS_TOKEN);
+
+    if(search_user_interaction($sender)){
+      update_user_interaction($sender, "default");
+    }else{
+      add_user_interaction($sender, "default");
+    }
+
+
   }else if(!empty($payload)){
+
     if($payload == 'title'){
+
       ask_user($sender, "Write your movie title", $PAGE_ACCESS_TOKEN);
+
+      if(search_user_interaction($sender)){
+        update_user_interaction($sender, "movie");
+      }
+
     }else if($payload == 'genre'){
+
       ask_user($sender, "Choose your favourite genre", $PAGE_ACCESS_TOKEN);
       quick_replies($sender, "", $PAGE_ACCESS_TOKEN);
+
+      if(search_user_interaction($sender)){
+        update_user_interaction($sender, "genre");
+      }
+
     }else if($payload == 'actor'){
+
       ask_user($sender, "Write your actor name", $PAGE_ACCESS_TOKEN);
+
+      if(search_user_interaction($sender)){
+        update_user_interaction($sender, "actor");
+      }
+
     }
   }
 
@@ -152,4 +182,36 @@ function quick_replies($sender, $message, $access_token){
 	$jsonData = quick_replies_genre($sender, $message);
 	$result = send_message($access_token, $jsonData);
 	return $result;
+}
+
+function search_user_interaction($userId){
+  $inp = file_get_contents('userInteraction.json');
+  $tempArray = json_decode($inp, true);
+  foreach ($tempArray as $key => $val) {
+    if($val["userId"] == $userId){
+      return true;
+    }
+  }
+  return false;
+}
+
+function add_user_interaction($userId, $interaction){
+  $inp = file_get_contents('userInteraction.json');
+  $tempArray = json_decode($inp, true);
+  array_push($tempArray, array('userId'=> $userId, 'interaction'=> $interaction));
+  $jsonData = json_encode($tempArray);
+  file_put_contents('userInteraction.json', $jsonData);
+}
+
+function update_user_interaction($userId, $interaction){
+  $inp = file_get_contents('userInteraction.json');
+  $tempArray = json_decode($inp, true);
+  foreach ($tempArray as $key => $val) {
+    if($val["userId"] == $userId){
+      $tempArray[$key]["interaction"] = $interaction;
+      break;
+    }
+  }
+  $jsonData = json_encode($tempArray);
+  file_put_contents('userInteraction.json', $jsonData);
 }
