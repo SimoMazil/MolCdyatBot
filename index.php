@@ -25,17 +25,52 @@ if ($verify_token === $VERIFY_TOKEN) {
   $message = $input['entry'][0]['messaging'][0]['message']['text'];
   // Get the message payload sent
   $payload = $input['entry'][0]['messaging'][0]['postback']['payload'];
+  // Get the message payload quick replies sent
+  $quickPayload = $input['entry'][0]['messaging'][0]['message']['quick_reply']['payload'];
 
-  if(!empty($message)){
-
-    send_qst($sender, "", $PAGE_ACCESS_TOKEN);
+  if(!empty($quickPayload)){
+    if($quickPayload == 'keepSearching'){
+      ask_user($sender, "Tape your movie title :D", $PAGE_ACCESS_TOKEN);
+    }else if($quickPayload == 'reset'){
+      update_user_interaction($sender, "default");
+      send_qst($sender, "", $PAGE_ACCESS_TOKEN);
+    }
+  }else if(!empty($message)){
 
     if(search_user_interaction($sender)){
-      update_user_interaction($sender, "default");
-    }else{
-      add_user_interaction($sender, "default");
-    }
+      $interaction = search_user_interaction($sender);
+      if($interaction == "default"){
+          send_qst($sender, "", $PAGE_ACCESS_TOKEN);
+          if(search_user_interaction($sender)){
+            update_user_interaction($sender, "default");
+          }else{
+            add_user_interaction($sender, "default");
+          }
+      }else if($interaction == "movie"){
+        $arrContextOptions=array(
+            "ssl"=>array(
+                "verify_peer"=>false,
+                "verify_peer_name"=>false,
+            ),
+        );
+        $title = str_replace(" ","_",$message);
+        $response = file_get_contents("https://yts.ag/api/v2/list_movies.json?query_term=".$title."&limit=10&sort_by=year&order_by=desc", false, stream_context_create($arrContextOptions));
+        $data = json_decode($response, true);
+        if($data["status"] == "ok"){
+          if($data["data"]["movie_count"] == "0"){
+            ask_user($sender, "Movie not found, try another movie", $PAGE_ACCESS_TOKEN);
+          }else{
+            $movies = $data["data"]["movies"];
+            $carousel = fetch_movies_to_carousel($movies);
+            send_movie_carousel($sender, $carousel, $PAGE_ACCESS_TOKEN);
+            send_ask_quick_replies($sender, "", $PAGE_ACCESS_TOKEN);
+          }
+        }else{
+          ask_user($sender, "status not ok!", $PAGE_ACCESS_TOKEN);
+        }
 
+      }
+    }
 
   }else if(!empty($payload)){
 
@@ -64,6 +99,28 @@ if ($verify_token === $VERIFY_TOKEN) {
         update_user_interaction($sender, "actor");
       }
 
+    }else if(split('_',$payload)[0] == "movieInfos"){
+      $movieId = split('_',$payload)[1];
+      $arrContextOptions=array(
+          "ssl"=>array(
+              "verify_peer"=>false,
+              "verify_peer_name"=>false,
+          ),
+      );
+      $response = file_get_contents("https://yts.ag/api/v2/movie_details.json?movie_id=".$movieId, false, stream_context_create($arrContextOptions));
+      $data = json_decode($response, true);
+      if($data["status"] == "ok"){
+        if($data["data"]["movie_count"] == "0"){
+          ask_user($sender, "Movie not found, try another movie", $PAGE_ACCESS_TOKEN);
+        }else{
+          $movie = $data["data"]["movie"];
+          send_movie_infos($sender, $movie, $PAGE_ACCESS_TOKEN);
+          ask_user($sender, "Description : ".$movie["description_full"], $PAGE_ACCESS_TOKEN);
+          send_ask_quick_replies($sender, "", $PAGE_ACCESS_TOKEN);
+        }
+      }else{
+        ask_user($sender, "status not ok!", $PAGE_ACCESS_TOKEN);
+      }
     }
   }
 
@@ -86,6 +143,7 @@ function send_message($access_token, $payload) {
 	// Send the request
 	$result  = curl_exec($ch);
 	//Return the result
+  print_r($result);
 	return $result;
 }
 
@@ -100,7 +158,7 @@ function first_qst_to_user($sender, $name){
         "type":"template",
         "payload":{
           "template_type":"button",
-          "text":"Hi i\'m MolCdyat Bot :D How are you ? Hope you are good, How do you like to find your movie by :",
+          "text":"Hi, How do you like to find your movie :D",
           "buttons":[
             {
               "type":"postback",
@@ -166,6 +224,67 @@ function quick_replies_genre($sender, $message){
 	return $jsonData;
 }
 
+
+function get_movie($sender, $message){
+	// Build the json payload data
+	$jsonData = '{
+    "recipient":{
+      "id":"'.$sender.'"
+    },
+    "message":{
+    "attachment":{
+      "type":"template",
+      "payload":{
+        "template_type":"generic",
+        "elements":'.$message.'
+      }
+    }
+  }
+
+	}';
+	return $jsonData;
+}
+
+function get_movie_infos($sender, $message){
+  // Build the json payload data
+  $jsonData = '{
+    "recipient":{
+      "id":"'.$sender.'"
+    },
+    "message":{
+      "text":"Title : '.$message["title_long"].'\nGenres : '.$message["genres"][0].' '.$message["genres"][1].' '.$message["genres"][2].' '.$message["genres"][3].'\nRating : '.$message["rating"].'\nRuntime : '.$message["runtime"].'"
+    }
+
+  }';
+  return $jsonData;
+}
+
+function ask_quicke_replies($sender, $message){
+  // Build the json payload data
+	$jsonData = '{
+    "recipient":{
+      "id":"'.$sender.'"
+    },
+    "message":{
+    "text":":p",
+    "quick_replies":[
+      {
+        "content_type":"text",
+        "title":"Keep searching",
+        "payload":"keepSearching"
+      },
+      {
+        "content_type":"text",
+        "title":"Reset",
+        "payload":"reset"
+      }
+    ]
+  }
+
+	}';
+	return $jsonData;
+}
+
 function send_qst($sender, $name, $access_token){
 	$jsonData = first_qst_to_user($sender, $name);
 	$result = send_message($access_token, $jsonData);
@@ -184,12 +303,30 @@ function quick_replies($sender, $message, $access_token){
 	return $result;
 }
 
+function send_movie_carousel($sender, $message, $access_token){
+	$jsonData = get_movie($sender, $message);
+	$result = send_message($access_token, $jsonData);
+	return $result;
+}
+
+function send_movie_infos($sender, $message, $access_token){
+	$jsonData = get_movie_infos($sender, $message);
+	$result = send_message($access_token, $jsonData);
+	return $result;
+}
+
+function send_ask_quick_replies($sender, $message, $access_token){
+	$jsonData = ask_quicke_replies($sender, $message);
+	$result = send_message($access_token, $jsonData);
+	return $result;
+}
+
 function search_user_interaction($userId){
   $inp = file_get_contents('userInteraction.json');
   $tempArray = json_decode($inp, true);
   foreach ($tempArray as $key => $val) {
     if($val["userId"] == $userId){
-      return true;
+      return $val["interaction"];
     }
   }
   return false;
@@ -214,4 +351,15 @@ function update_user_interaction($userId, $interaction){
   }
   $jsonData = json_encode($tempArray);
   file_put_contents('userInteraction.json', $jsonData);
+}
+
+function fetch_movies_to_carousel($movies){
+  $data = array();
+
+  foreach($movies as $val){
+    array_push($data, array("title"=> substr($val["title_long"],0,80), "item_url"=> "", "image_url"=> $val["medium_cover_image"], "subtitle"=> substr($val["summary"],0,80),
+    "buttons"=> array(array("type"=> "web_url", "url"=> "https://www.youtube.com/watch?v=".$val["yt_trailer_code"], "title"=> "View Trailler"),array("type"=> "postback", "title"=> "More Information", "payload"=> "movieInfos_".$val["id"]))));
+  }
+  return json_encode($data);
+
 }
