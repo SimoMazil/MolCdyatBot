@@ -29,12 +29,14 @@ if ($verify_token === $VERIFY_TOKEN) {
   $quickPayload = $input['entry'][0]['messaging'][0]['message']['quick_reply']['payload'];
 
   if(!empty($quickPayload)){
+    $interaction = search_user_interaction($sender);
     if($quickPayload == 'keepSearching'){
-      $interaction = search_user_interaction($sender);
       if($interaction == "movie"){
           ask_user($sender, "Tape your movie title B-)", $PAGE_ACCESS_TOKEN);
       }else if($interaction == "genre"){
         quick_replies($sender, "", $PAGE_ACCESS_TOKEN);
+      }else if($interaction == "discuss"){
+        ask_user($sender, "Tape another genre B-)", $PAGE_ACCESS_TOKEN);
       }
 
     }else if($quickPayload == 'reset'){
@@ -48,10 +50,25 @@ if ($verify_token === $VERIFY_TOKEN) {
       search_movie_by_genre($sender, "sci-fi", $PAGE_ACCESS_TOKEN);
     }else if($quickPayload == "animation"){
       search_movie_by_genre($sender, "animation", $PAGE_ACCESS_TOKEN);
+    }else if($quickPayload == "discussYES"){
+      send_rate_quick_replies($sender, "", $PAGE_ACCESS_TOKEN);
+    }else if($quickPayload == "discussNO"){
+      ask_user($sender, "Ok then i advicee you to check it :)", $PAGE_ACCESS_TOKEN);
+      send_ask_quick_replies($sender, "", $PAGE_ACCESS_TOKEN);
+    }else if($quickPayload == "rateYES"){
+      ask_user($sender, "Entre your rating between 0 to 9", $PAGE_ACCESS_TOKEN);
+      update_user_interaction($sender, "rateMovie");
+    }else if($quickPayload == "rateNO"){
+      ask_user($sender, "Ok then as you like :p", $PAGE_ACCESS_TOKEN);
+      send_ask_quick_replies($sender, "", $PAGE_ACCESS_TOKEN);
     }
+
   }else if(!empty($message)){
     if(strtolower($message) == "bye"){
       send_gif($sender, "https://media.giphy.com/media/11eDYhyA5BgL0k/giphy.gif", $PAGE_ACCESS_TOKEN);
+    }else if(strtolower($message) == "reset"){
+      update_user_interaction($sender, "default");
+      send_qst($sender, "", $PAGE_ACCESS_TOKEN);
     }else if(search_user_interaction($sender)){
       $interaction = search_user_interaction($sender);
       if($interaction == "default"){
@@ -84,6 +101,36 @@ if ($verify_token === $VERIFY_TOKEN) {
           ask_user($sender, "status not ok!", $PAGE_ACCESS_TOKEN);
         }
 
+      }else if($interaction == "discuss"){
+        $arrContextOptions=array(
+            "ssl"=>array(
+                "verify_peer"=>false,
+                "verify_peer_name"=>false,
+            ),
+        );
+        $response = file_get_contents("https://yts.ag/api/v2/list_movies.json?genre=".$message."&limit=1&minimum_rating=7&order_by=desc", false, stream_context_create($arrContextOptions));
+        $data = json_decode($response, true);
+        if($data["status"] == "ok"){
+          if($data["data"]["movie_count"] == "0"){
+            ask_user($sender, "sorry, i can't find this genre of movies in my DB! can you try another type ?", $PAGE_ACCESS_TOKEN);
+          }else{
+            $movies = $data["data"]["movies"];
+            $carousel = fetch_movies_to_carousel($movies);
+            ask_user($sender, "According this is one of the best movie in this genre so far B-)", $PAGE_ACCESS_TOKEN);
+            send_movie_carousel($sender, $carousel, $PAGE_ACCESS_TOKEN);
+            send_discuss_quick_replies($sender, "", $PAGE_ACCESS_TOKEN);
+          }
+        }else{
+          ask_user($sender, "status not ok!", $PAGE_ACCESS_TOKEN);
+        }
+      }else if($interaction == "rateMovie"){
+        if($message >= 0 && $message <= 9){
+          ask_user($sender, "your rating has been made", $PAGE_ACCESS_TOKEN);
+          update_user_interaction($sender, "discuss");
+          send_ask_quick_replies($sender, "", $PAGE_ACCESS_TOKEN);
+        }else{
+          ask_user($sender, "plz enter number between 0 adn 9", $PAGE_ACCESS_TOKEN);
+        }
       }
     }
 
@@ -112,7 +159,16 @@ if ($verify_token === $VERIFY_TOKEN) {
       }else{
         add_user_interaction($sender, "default");
       }
+    }else if($payload == "discuss"){
+
+      ask_user($sender, "What's your favorite genre ?", $PAGE_ACCESS_TOKEN);
+
+      if(search_user_interaction($sender)){
+        update_user_interaction($sender, "discuss");
+      }
+
     }else if(split('_',$payload)[0] == "movieInfos"){
+      $interaction = search_user_interaction($sender);
       $movieId = split('_',$payload)[1];
       $arrContextOptions=array(
           "ssl"=>array(
@@ -129,7 +185,9 @@ if ($verify_token === $VERIFY_TOKEN) {
           $movie = $data["data"]["movie"];
           send_movie_infos($sender, $movie, $PAGE_ACCESS_TOKEN);
           ask_user($sender, "Description : ".$movie["description_full"], $PAGE_ACCESS_TOKEN);
-          send_ask_quick_replies($sender, "", $PAGE_ACCESS_TOKEN);
+          if($interaction != "discuss"){
+              send_ask_quick_replies($sender, "", $PAGE_ACCESS_TOKEN);
+          }
         }
       }else{
         ask_user($sender, "status not ok!", $PAGE_ACCESS_TOKEN);
@@ -182,6 +240,11 @@ function first_qst_to_user($sender, $name){
               "type":"postback",
               "title":"by Genre",
               "payload":"genre"
+            },
+            {
+              "type":"postback",
+              "title":"by discussion",
+              "payload":"discuss"
             }
           ]
         }
@@ -270,7 +333,7 @@ function get_movie_infos($sender, $message){
       "id":"'.$sender.'"
     },
     "message":{
-      "text":"Title : '.$message["title_long"].'\nGenres : '.$message["genres"][0].' '.$message["genres"][1].' '.$message["genres"][2].' '.$message["genres"][3].'\nRating : '.$message["rating"].'\nRuntime : '.$message["runtime"].'"
+      "text":"Title : '.$message["title_long"].'\nGenres : '.$message["genres"][0].' '.$message["genres"][1].' '.$message["genres"][2].' '.$message["genres"][3].'\nRating : '.$message["rating"].'\nRuntime : '.$message["runtime"].' min"
     }
 
   }';
@@ -295,6 +358,58 @@ function ask_quicke_replies($sender, $message){
         "content_type":"text",
         "title":"Reset",
         "payload":"reset"
+      }
+    ]
+  }
+
+	}';
+	return $jsonData;
+}
+
+function discuss_quick_replies($sender, $message){
+  // Build the json payload data
+	$jsonData = '{
+    "recipient":{
+      "id":"'.$sender.'"
+    },
+    "message":{
+    "text":"have you seen this movie ?",
+    "quick_replies":[
+      {
+        "content_type":"text",
+        "title":"Yes",
+        "payload":"discussYES"
+      },
+      {
+        "content_type":"text",
+        "title":"No",
+        "payload":"discussNO"
+      }
+    ]
+  }
+
+	}';
+	return $jsonData;
+}
+
+function rate_quick_replies($sender, $message){
+  // Build the json payload data
+	$jsonData = '{
+    "recipient":{
+      "id":"'.$sender.'"
+    },
+    "message":{
+    "text":"Oh! cool, do you wanna rate this movie ?",
+    "quick_replies":[
+      {
+        "content_type":"text",
+        "title":"Yes",
+        "payload":"rateYES"
+      },
+      {
+        "content_type":"text",
+        "title":"No",
+        "payload":"rateNO"
       }
     ]
   }
@@ -354,6 +469,18 @@ function send_movie_infos($sender, $message, $access_token){
 
 function send_ask_quick_replies($sender, $message, $access_token){
 	$jsonData = ask_quicke_replies($sender, $message);
+	$result = send_message($access_token, $jsonData);
+	return $result;
+}
+
+function send_discuss_quick_replies($sender, $message, $access_token){
+	$jsonData = discuss_quick_replies($sender, $message);
+	$result = send_message($access_token, $jsonData);
+	return $result;
+}
+
+function send_rate_quick_replies($sender, $message, $access_token){
+	$jsonData = rate_quick_replies($sender, $message);
 	$result = send_message($access_token, $jsonData);
 	return $result;
 }
@@ -418,7 +545,7 @@ function search_movie_by_genre($sender, $genre, $PAGE_ACCESS_TOKEN){
   $data = json_decode($response, true);
   if($data["status"] == "ok"){
     if($data["data"]["movie_count"] == "0"){
-      ask_user($sender, "Movie not found, try another movie", $PAGE_ACCESS_TOKEN);
+      ask_user($sender, "genre not found, try another genre", $PAGE_ACCESS_TOKEN);
     }else{
       $movies = $data["data"]["movies"];
       $carousel = fetch_movies_to_carousel($movies);
